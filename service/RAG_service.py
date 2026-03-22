@@ -1,3 +1,6 @@
+import json
+import re
+
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableParallel, RunnableLambda, RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
@@ -30,11 +33,22 @@ class RAGService:
 
         Each context chunk has a timestamp like [MM:SS].
 
+        Return STRICT JSON in this format:
+        {{"segments": [
+            {{
+            "sentence": "string",
+            "timestamp": "MM:SS"
+            }}
+        ]
+        }}
+
         INSTRUCTIONS:
-        - Include timestamps in your answer when referencing information
-        - Use format like: [05:42]
-        - If multiple points → include multiple timestamps
-        - Do NOT hallucinate timestamps
+        - Break your answer into multiple sentences
+        - Each sentence MUST have exactly ONE relevant timestamp
+        - Extract the timestamp from the context
+        - Do NOT group multiple sentences under one timestamp
+        - Do NOT return a separate timestamps list
+        - Do NOT add extra text outside JSON
 
         Context:
         {context}
@@ -67,22 +81,18 @@ class RAGService:
         chain = self.build_chain()
 
         answer =  chain.invoke(query)
-        print("answer : ",answer)
-        print("\ntimestamp \n")
-        for doc in retrieved_docs:
-            start = doc.metadata.get("start_time", 0)
-            end = doc.metadata.get("end_time", 0)
+        json_response = self.parse_output(answer)
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-            print(
-                f"{self.format_timestamp(start)} - {self.format_timestamp(end)}"
-            )
-            print(
-                self.generate_youtube_link(video_id=video_id, start_time=start)
-            )
-            print("-" * 40)
+        for seg in json_response["segments"]:
+            ts = seg["timestamp"].strip("[]")  
+            m, s = map(int, ts.split(":"))
+            seg["url"] = f"{video_url}&t={m*60 + s}s"
         
-    def format_timestamp(self, seconds):
-        return f"{int(seconds//60):02d}:{int(seconds%60):02d}"
+        return json.dumps(json_response)
     
-    def generate_youtube_link(self, video_id, start_time):
-        return f"https://www.youtube.com/watch?v={video_id}&t={int(start_time)}s"
+    def parse_output(cls, output):
+        try:
+            return json.loads(output)
+        except:
+            return {"answer": output, "timestamps": []}
