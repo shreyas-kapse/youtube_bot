@@ -15,7 +15,7 @@ def main():
     rag = RAGService()
     ingestion.ingest_video(video_id)
 
-    answer = rag.ask("summarize What donald trump saying in this video.")
+    answer = rag.ask(query = "summarize What donald trump saying in this video.", video_id= video_id)
     print(answer)
 
 if __name__ == "__main__":
