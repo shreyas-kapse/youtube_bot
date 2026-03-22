@@ -1,6 +1,5 @@
 from langchain_core.documents import Document
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from youtube_transcript_api import YouTubeTranscriptApi
 
 class TranscriptService:
@@ -8,17 +7,52 @@ class TranscriptService:
     def get_video_transcript(cls, video_id: str) -> str:
         api = YouTubeTranscriptApi()
         transcript_list = api.fetch(video_id, languages=["en"])
-        transcript = " ".join(chunk.text for chunk in transcript_list)
+        transcript=[]
+        for chunk in transcript_list:
+            transcript.append({
+                "text":chunk.text,
+                "start": chunk.start,
+                "duration": chunk.duration,
+                "end": chunk.start + chunk.duration
+            })
         return transcript
 
 
-    def transcript_to_documents(cls, transcript:str) -> list[Document]:
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200
-        )
-        docs = splitter.create_documents([transcript])
-        for doc in docs:
-            doc.page_content = f"passage: {doc.page_content}"
+    def transcript_to_documents(cls, transcript: list[dict]) -> list[Document]:
+        documents = []
 
-        return docs
+        current_text = ""
+        start_time = None
+
+        for segment in transcript:
+            if start_time is None:
+                start_time = segment["start"]
+
+            current_text += " " + segment["text"]
+
+            if len(current_text.split()) >= 200:
+                documents.append(
+                    Document(
+                        page_content=f"passage: {current_text.strip()}",
+                        metadata={
+                            "start_time": start_time,
+                            "end_time": segment["end"]
+                        }
+                    )
+                )
+                current_text = ""
+                start_time = None
+
+        if current_text:
+            documents.append(
+                Document(
+                    page_content=f"passage: {current_text.strip()}",
+                    metadata={
+                        "start_time": start_time,
+                        "end_time": transcript[-1]["end"]
+                    }
+                )
+            )
+
+        return documents
+
