@@ -20,5 +20,9 @@ class QdrantSingleton:
             )
         return cls._instance
 
+    @property
+    def client(self):
+        return self._client
+
     def get_client(self):
         return self._client
