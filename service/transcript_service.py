@@ -18,7 +18,7 @@ class TranscriptService:
         return transcript
 
 
-    def transcript_to_documents(cls, transcript: list[dict]) -> list[Document]:
+    def transcript_to_documents(cls, transcript: list[dict], video_id: str) -> list[Document]:
         documents = []
 
         current_text = ""
@@ -35,6 +35,7 @@ class TranscriptService:
                     Document(
                         page_content=f"passage: {current_text.strip()}",
                         metadata={
+                            "video_id": video_id,
                             "start_time": start_time,
                             "end_time": segment["end"]
                         }
@@ -48,6 +49,7 @@ class TranscriptService:
                 Document(
                     page_content=f"passage: {current_text.strip()}",
                     metadata={
+                        "video_id": video_id,
                         "start_time": start_time,
                         "end_time": transcript[-1]["end"]
                     }

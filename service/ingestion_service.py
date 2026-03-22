@@ -10,5 +10,5 @@ class IngestionService:
         
     def ingest_video(self, video_id):
         transcript = self.transcript_service.get_video_transcript(video_id)
-        docs = self.transcript_service.transcript_to_documents(transcript)
+        docs = self.transcript_service.transcript_to_documents(transcript= transcript, video_id= video_id)
         self.vector_service.add_documents(docs=docs)

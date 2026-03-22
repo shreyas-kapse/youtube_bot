@@ -9,7 +9,7 @@ try:
     from enums import CollectionName
 except ImportError:
     from ..enums import CollectionName
-from qdrant_client.models import VectorParams, Distance
+from qdrant_client.models import FieldCondition, Filter, MatchValue, VectorParams, Distance
 
 logger = logging.getLogger(__name__)
 class VectorService:
@@ -38,6 +38,26 @@ class VectorService:
             logger.info("Qdrant collection created")
 
     def add_documents(self, docs):
+        if not docs:
+            return
+        video_id = docs[0].metadata.get("video_id")
+
+        existing = self.vector_store.client.count(
+            collection_name=self.vector_store.collection_name,
+            count_filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="metadata.video_id",
+                        match=MatchValue(value=video_id)
+                    )
+                ]
+            )
+        )
+
+        if existing.count > 0:
+            logger.info(f"Video {video_id} already embedded. Skipping...")
+            return
+
         self.vector_store.add_documents(docs)
 
     def get_retriever(self, k=4):
