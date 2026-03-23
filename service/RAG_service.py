@@ -5,6 +5,7 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableParallel, RunnableLambda, RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
+from service.BM25_service import BM25Service
 from service.LLM_service import LLMService
 from service.reranker_service import RerankerService
 from service.vector_service import VectorService
@@ -77,11 +78,16 @@ class RAGService:
     def ask(self, query: str, video_id: str):
 
         query = f"query: {query}"
-        retrieved_docs = self.retriever.invoke(query)
+        vector_docs = self.retriever.invoke(query)
         
-        reranked_docs = RerankerService.rerank(query=query, docs=retrieved_docs)
+        bm25 = BM25Service(vector_docs)
+        keyword_docs = bm25.search(query=query, top_k=3)
         
-        top_k = reranked_docs[:3]
+        combined_docs = list({doc.page_content: doc for doc in vector_docs + keyword_docs}.values())
+        
+        reranked_docs = RerankerService.rerank(query=query.replace("query: ",""), docs=combined_docs)
+        
+        top_k = reranked_docs[:5]
         context = format_docs(top_k)
         
         answer =  self.llm.invoke(

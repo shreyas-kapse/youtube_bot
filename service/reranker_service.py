@@ -13,7 +13,7 @@ class RerankerService:
     @classmethod
     def rerank(cls, query: str, docs: list):
         model = cls.get_model()
-        pairs = [(query, doc.page_content) for doc in docs]
+        pairs = [(query, doc.page_content) for doc in docs if hasattr(doc, "page_content")]
         
         scores = model.predict(pairs)
         scored_docs = list(zip(docs, scores))
