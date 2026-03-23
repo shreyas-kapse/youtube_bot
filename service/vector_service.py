@@ -60,7 +60,7 @@ class VectorService:
 
         self.vector_store.add_documents(docs)
 
-    def get_retriever(self, k=4):
+    def get_retriever(self, k=10):
         return self.vector_store.as_retriever(
             search_kwargs={"k": k}
         )

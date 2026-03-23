@@ -6,6 +6,7 @@ from langchain_core.runnables import RunnableParallel, RunnableLambda, RunnableP
 from langchain_core.output_parsers import StrOutputParser
 
 from service.LLM_service import LLMService
+from service.reranker_service import RerankerService
 from service.vector_service import VectorService
 
 def format_docs(docs):
@@ -78,10 +79,19 @@ class RAGService:
         query = f"query: {query}"
         retrieved_docs = self.retriever.invoke(query)
         
-        chain = self.build_chain()
-
-        answer =  chain.invoke(query)
-        json_response = self.parse_output(answer)
+        reranked_docs = RerankerService.rerank(query=query, docs=retrieved_docs)
+        
+        top_k = reranked_docs[:3]
+        context = format_docs(top_k)
+        
+        answer =  self.llm.invoke(
+            self.prompt.format(
+                context=context,
+                question= query
+            )
+        )
+        
+        json_response = self.parse_output(answer.text)
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 
         for seg in json_response["segments"]:
