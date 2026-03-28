@@ -1,26 +1,44 @@
 import logging
+from fastapi import FastAPI
+from contextlib import asynccontextmanager
 
 from service.RAG_service import RAGService
 from service.ingestion_service import IngestionService
+from service.qa_service import QaService
 from utils.logger import setup_logger
 
 logger = logging.getLogger(__name__)
 
-def main():
+qa_service = None 
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global qa_service
 
     setup_logger()
-    video_id = "hBMoPUAeLnY"
-    
-    ingestion = IngestionService()
-    rag = RAGService()
-    ingestion.ingest_video(video_id)
 
-    while True:
-        query = input("press -1 to exit the application\n ")
-        if  str(query).strip() =='-1':
-            break
-        answer = rag.ask(query=query, video_id=video_id)
-        print(answer)
+    video_id = "hBMoPUAeLnY"
+    ingestion_service = IngestionService()
+    rag_service = RAGService()
+
+    qa_service = QaService(
+        rag_service=rag_service,
+        ingestion_service=ingestion_service
+    )
     
-if __name__ == "__main__":
-    main()
+    logger.info("App started successfully")
+
+    yield 
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/ask")
+def ask(query: str):
+    return qa_service.answer_question(query)
+
+@app.get("/process")
+def store_embeddings(video_id:str):
+    qa_service.process_video_embeddings(video_id=video_id)
