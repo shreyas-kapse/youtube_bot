@@ -31,7 +31,7 @@ class RAGService:
             template="""
         You are an AI assistant answering questions from a YouTube video.
 
-        Use ONLY the provided context.
+        Use ONLY the provided context as your source of information.
 
         Each context chunk has a timestamp like [MM:SS].
 
@@ -48,9 +48,12 @@ class RAGService:
         - Break your answer into multiple sentences
         - Each sentence MUST have exactly ONE relevant timestamp
         - Extract the timestamp from the context
+        - Rewrite the content in your own words (DO NOT copy sentences exactly)
+        - Make sentences simple, clear, and easy to understand
+        - Preserve the original meaning from the context
+        - Do NOT add information not present in the context
         - Do NOT group multiple sentences under one timestamp
-        - Do NOT return a separate timestamps list
-        - Do NOT add extra text outside JSON
+        - Do NOT return anything outside the JSON format
 
         Context:
         {context}
@@ -70,7 +73,7 @@ class RAGService:
             {
                 "context": self.retriever | RunnableLambda(format_docs),
                 "question": RunnablePassthrough()
-            }
+            }``
         )
 
         return parallel_chain | self.prompt | self.llm | self.parser
@@ -104,7 +107,8 @@ class RAGService:
             ts = seg["timestamp"].strip("[]")  
             m, s = map(int, ts.split(":"))
             seg["url"] = f"{video_url}&t={m*60 + s}s"
-        
+
+        json_response["query"] = query
         return json.dumps(json_response)
     
     def parse_output(cls, output):
