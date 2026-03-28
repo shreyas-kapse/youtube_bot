@@ -73,7 +73,7 @@ class RAGService:
             {
                 "context": self.retriever | RunnableLambda(format_docs),
                 "question": RunnablePassthrough()
-            }``
+            }
         )
 
         return parallel_chain | self.prompt | self.llm | self.parser
