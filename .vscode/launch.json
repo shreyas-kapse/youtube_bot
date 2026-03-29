@@ -2,14 +2,19 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug YouTube Bot",
+      "name": "Debug YouTube Bot (FastAPI)",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/main.py",
+      "module": "uvicorn",
+      "args": [
+        "main:app",
+        "--reload"
+      ],
       "cwd": "${workspaceFolder}",
       "env": {
         "PYTHONPATH": "${workspaceFolder}"
-      }
+      },
+      "justMyCode": true
     }
   ]
 }
