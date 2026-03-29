@@ -8,6 +8,6 @@ class QaService:
         self.ingestion_service.ingest_video(video_id)
         
         
-    def answer_question(self, query:str):
-        answer = self.rag_service.ask(query=query, video_id=self.video_id)
+    def answer_question(self, query:str, video_id:str):
+        answer = self.rag_service.ask(query=query, video_id=video_id)
         return answer

@@ -6,6 +6,8 @@ from service.RAG_service import RAGService
 from service.ingestion_service import IngestionService
 from service.qa_service import QaService
 from utils.logger import setup_logger
+from fastapi.middleware.cors import CORSMiddleware
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +36,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-
-@app.get("/ask")
-def ask(query: str):
-    return qa_service.answer_question(query)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/process")
 def store_embeddings(video_id:str):
     qa_service.process_video_embeddings(video_id=video_id)
+    return {"status":"Processed"}
+
+@app.get("/ask")
+def ask(query: str, video_id:str):
+    return qa_service.answer_question(query=query, video_id=video_id)

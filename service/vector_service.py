@@ -60,7 +60,17 @@ class VectorService:
 
         self.vector_store.add_documents(docs)
 
-    def get_retriever(self, k=10):
+    def get_retriever(self, video_id: str, k=10):
         return self.vector_store.as_retriever(
-            search_kwargs={"k": k}
+            search_kwargs={
+                "k": k,
+                "filter": {
+                    "must": [
+                        {
+                            "key": "metadata.video_id",
+                            "match": {"value": video_id}
+                        }
+                    ]
+                }
+            }
         )

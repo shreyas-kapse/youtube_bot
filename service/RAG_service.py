@@ -1,9 +1,6 @@
 import json
-import re
 
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnableParallel, RunnableLambda, RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
 
 from service.BM25_service import BM25Service
 from service.LLM_service import LLMService
@@ -15,18 +12,14 @@ def format_docs(docs):
     for doc in docs:
         start = doc.metadata.get("start_time", 0)
         time = f"{int(start//60):02d}:{int(start%60):02d}"
-        formatted_docs.append(
-            f"[{time}] {doc.page_content}"
-        )
+        formatted_docs.append(f"[{time}] {doc.page_content}")
     return "\n\n".join(formatted_docs)
 
 class RAGService:
 
     def __init__(self):
         self.vector_service = VectorService()
-        self.retriever = self.vector_service.get_retriever()
         self.llm = LLMService.get_llm()
-        
         self.prompt = PromptTemplate(
             template="""
         You are an AI assistant answering questions from a YouTube video.
@@ -41,19 +34,16 @@ class RAGService:
             "sentence": "string",
             "timestamp": "MM:SS"
             }}
-        ]
-        }}
+        ]}}
 
         INSTRUCTIONS:
         - Break your answer into multiple sentences
         - Each sentence MUST have exactly ONE relevant timestamp
         - Extract the timestamp from the context
-        - Rewrite the content in your own words (DO NOT copy sentences exactly)
-        - Make sentences simple, clear, and easy to understand
-        - Preserve the original meaning from the context
-        - Do NOT add information not present in the context
-        - Do NOT group multiple sentences under one timestamp
-        - Do NOT return anything outside the JSON format
+        - Rewrite the content in your own words
+        - Keep it simple and clear
+        - Do NOT add information not in context
+        - Do NOT return anything outside JSON
 
         Context:
         {context}
@@ -63,56 +53,61 @@ class RAGService:
 
         Answer:
         """,
-            input_variables=["context", "question"]
+        input_variables=["context", "question"])
+
+    def get_retriever(self, video_id: str, k=10):
+        return self.vector_service.get_retriever(
+            video_id=video_id,
+            k=k
         )
 
-        self.parser = StrOutputParser()
-
-    def build_chain(self):
-        parallel_chain = RunnableParallel(
-            {
-                "context": self.retriever | RunnableLambda(format_docs),
-                "question": RunnablePassthrough()
-            }
-        )
-
-        return parallel_chain | self.prompt | self.llm | self.parser
-
-    def ask(self, query: str, video_id: str):
-
-        query = f"query: {query}"
-        vector_docs = self.retriever.invoke(query)
-        
-        bm25 = BM25Service(vector_docs)
-        keyword_docs = bm25.search(query=query, top_k=3)
-        
-        combined_docs = list({doc.page_content: doc for doc in vector_docs + keyword_docs}.values())
-        
-        reranked_docs = RerankerService.rerank(query=query.replace("query: ",""), docs=combined_docs)
-        
-        top_k = reranked_docs[:5]
-        context = format_docs(top_k)
-        
-        answer =  self.llm.invoke(
-            self.prompt.format(
-                context=context,
-                question= query
-            )
-        )
-        
-        json_response = self.parse_output(answer.text)
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
-
-        for seg in json_response["segments"]:
-            ts = seg["timestamp"].strip("[]")  
-            m, s = map(int, ts.split(":"))
-            seg["url"] = f"{video_url}&t={m*60 + s}s"
-
-        json_response["query"] = query
-        return json.dumps(json_response)
-    
-    def parse_output(cls, output):
+    def parse_output(self, output):
         try:
             return json.loads(output)
         except:
-            return {"answer": output, "timestamps": []}
+            return {"segments": []}
+
+
+    def ask(self, query: str, video_id: str):
+
+        retriever = self.get_retriever(video_id=video_id)
+        vector_docs = retriever.invoke(query)
+
+        bm25 = BM25Service(vector_docs)
+        keyword_docs = bm25.search(query=query, top_k=3)
+
+        combined_docs = list({
+            doc.page_content: doc
+            for doc in (vector_docs + keyword_docs)
+        }.values())
+
+        reranked_docs = RerankerService.rerank(
+            query=query,
+            docs=combined_docs
+        )
+
+        top_k_docs = reranked_docs[:5]
+        context = format_docs(top_k_docs)
+
+        response = self.llm.invoke(
+            self.prompt.format(
+                context=context,
+                question=query
+            )
+        )
+
+        json_response = self.parse_output(response.text)
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+
+        for seg in json_response.get("segments", []):
+            ts = seg["timestamp"].strip("[]")
+
+            try:
+                m, s = map(int, ts.split(":"))
+                seconds = m * 60 + s
+                seg["url"] = f"{video_url}&t={seconds}s"
+            except:
+                seg["url"] = video_url
+
+        json_response["query"] = query
+        return json_response
