@@ -21,7 +21,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             div.innerHTML = `
                 <p>${seg.sentence}</p>
                 <small>⏱ ${seg.timestamp}</small><br/>
-                <button class="jump" data-url="${seg.url}">▶️ Jump</button>
+                <button class="jump" data-url="${seg.url}">Jump</button>
             `;
 
             chat.appendChild(div);
@@ -75,6 +75,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (videoId) {
         await loadChat(videoId);
+        try {
+            await fetch(`http://localhost:8000/process?video_id=${videoId}`, {
+                method: "GET"
+            });
+            console.log("Process API called");
+        } catch (err) {
+            console.error("Process API failed", err);
+        }
     }
 
     btn.addEventListener("click", async () => {
