@@ -74,3 +74,19 @@ class VectorService:
                 }
             }
         )
+        
+    def search(self, query: str, video_id: str, k: int = 10):
+        results = self.vector_store.similarity_search(
+            query=query,
+            k=k,
+            filter={
+                "must": [
+                    {
+                        "key": "metadata.video_id",
+                        "match": {"value": video_id}
+                    }
+                ]
+            }
+        )
+
+        return results

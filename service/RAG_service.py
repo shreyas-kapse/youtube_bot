@@ -6,7 +6,7 @@ from service.BM25_service import BM25Service
 from service.LLM_service import LLMService
 from service.reranker_service import RerankerService
 from service.vector_service import VectorService
-
+from service.query_service import QueryService
 def format_docs(docs):
     formatted_docs = []
     for doc in docs:
@@ -20,6 +20,7 @@ class RAGService:
     def __init__(self):
         self.vector_service = VectorService()
         self.llm = LLMService.get_llm()
+        self.query_service = QueryService(self.llm)
         self.prompt = PromptTemplate(
             template="""
         You are an AI assistant answering questions from a YouTube video.
@@ -69,26 +70,40 @@ class RAGService:
 
 
     def ask(self, query: str, video_id: str):
-
-        retriever = self.get_retriever(video_id=video_id)
-        vector_docs = retriever.invoke(query)
-
-        bm25 = BM25Service(vector_docs)
+        enhanced_docs = self.enhanced_retrieval(query=query, video_id=video_id)
+        #BM25
+        bm25 = BM25Service(enhanced_docs)
         keyword_docs = bm25.search(query=query, top_k=3)
+        
+        all_docs = enhanced_docs + keyword_docs * 2
 
-        combined_docs = list({
-            doc.page_content: doc
-            for doc in (vector_docs + keyword_docs)
-        }.values())
+        #Deduplicate
+        seen = set()
+        combined_docs = []
 
-        reranked_docs = RerankerService.rerank(
-            query=query,
-            docs=combined_docs
-        )
+        for doc in all_docs:
+            key = (doc.page_content, doc.metadata.get("timestamp"))
+            if key not in seen:
+                seen.add(key)
+                combined_docs.append(doc)
 
-        top_k_docs = reranked_docs[:5]
-        context = format_docs(top_k_docs)
+        #Rerank
+        final_docs = RerankerService.rerank(query, combined_docs)
 
+        if not final_docs:
+            return {
+                "answer": "No relevant content found in this video.",
+                "confidence": 0
+            }
+        top_k_docs = final_docs[:5]
+
+        #Build context
+        context = "\n\n".join([
+            d.page_content[:300] + f" (ts: {d.metadata.get('timestamp')})"
+            for d in top_k_docs
+        ])
+
+        #Generate answer
         response = self.llm.invoke(
             self.prompt.format(
                 context=context,
@@ -96,18 +111,36 @@ class RAGService:
             )
         )
 
-        json_response = self.parse_output(response.text)
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        return response
+        
+    def enhanced_retrieval(self, query, video_id):
+        rewritten = self.query_service.rewrite_query(query)
 
-        for seg in json_response.get("segments", []):
-            ts = seg["timestamp"].strip("[]")
+        #expand
+        queries = self.query_service.expand_query(rewritten)
+        all_docs = []
 
-            try:
-                m, s = map(int, ts.split(":"))
-                seconds = m * 60 + s
-                seg["url"] = f"{video_url}&t={seconds}s"
-            except:
-                seg["url"] = video_url
+        #retrieve for each query
+        for q in queries:
+            docs = self.vector_service.search(q, video_id)
+            all_docs.extend(docs)
 
-        json_response["query"] = query
-        return json_response
+        # deduplicate
+        unique_docs = self.deduplicate_docs(all_docs)
+
+        #rerank
+        reranked = RerankerService.rerank(query, unique_docs)
+        return reranked[:5]
+    
+    def deduplicate_docs(self, docs):
+        seen = set()
+        unique = []
+
+        for doc in docs:
+            key = doc.page_content
+
+            if key not in seen:
+                seen.add(key)
+                unique.append(doc)
+
+        return unique
