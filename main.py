@@ -7,7 +7,13 @@ from service.ingestion_service import IngestionService
 from service.qa_service import QaService
 from utils.logger import setup_logger
 from fastapi.middleware.cors import CORSMiddleware
+from langsmith import traceable
+from dotenv import load_dotenv
+import torch
 
+
+torch.cuda.empty_cache()
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +34,7 @@ async def lifespan(app: FastAPI):
         rag_service=rag_service,
         ingestion_service=ingestion_service
     )
-    
     logger.info("App started successfully")
-
     yield 
 
 
@@ -45,10 +49,12 @@ app.add_middleware(
 )
 
 @app.get("/process")
+@traceable
 def store_embeddings(video_id:str):
     qa_service.process_video_embeddings(video_id=video_id)
     return {"status":"Processed"}
 
 @app.get("/ask")
+@traceable
 def ask(query: str, video_id:str):
     return qa_service.answer_question(query=query, video_id=video_id)

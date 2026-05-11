@@ -1,6 +1,7 @@
 import json
 
 from langchain_core.prompts import PromptTemplate
+from langsmith import traceable
 
 from service.BM25_service import BM25Service
 from service.LLM_service import LLMService
@@ -56,6 +57,7 @@ class RAGService:
         """,
         input_variables=["context", "question"])
 
+    @traceable
     def get_retriever(self, video_id: str, k=10):
         return self.vector_service.get_retriever(
             video_id=video_id,
@@ -112,7 +114,8 @@ class RAGService:
         )
 
         return response
-        
+    
+    @traceable
     def enhanced_retrieval(self, query, video_id):
         rewritten = self.query_service.rewrite_query(query)
 
